@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useReducer, ReactNode } from 'react';
+import React, { createContext, useContext, useReducer, ReactNode, useEffect } from 'react';
+import { useAuth } from './AuthContext';
 import { CartItem, Product } from '../types';
 
 interface CartState {
@@ -94,6 +95,44 @@ const CartContext = createContext<CartContextType | undefined>(undefined);
 
 export function CartProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(cartReducer, initialState);
+  const { user, jwt } = useAuth();
+
+  // Backend API base URL for deployed version
+  const baseURL = 'https://srrfarms-backend.onrender.com/api';
+
+  // Load cart from backend on login
+  useEffect(() => {
+    if (user && jwt) {
+      fetch(`${baseURL}/cart`, {
+        headers: { 'Authorization': `Bearer ${jwt}` }
+      })
+        .then(res => res.json())
+        .then(data => {
+          if (data.success && Array.isArray(data.items)) {
+            dispatch({ type: 'CLEAR_CART' });
+            data.items.forEach((item: any) => {
+              for (let i = 0; i < item.quantity; i++) {
+                dispatch({ type: 'ADD_TO_CART', payload: item.product });
+              }
+            });
+          }
+        });
+    }
+  }, [user, jwt]);
+
+  // Save cart to backend on every change
+  useEffect(() => {
+    if (user && jwt) {
+      fetch(`${baseURL}/cart`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${jwt}`
+        },
+        body: JSON.stringify({ items: state.items })
+      });
+    }
+  }, [state.items, user, jwt]);
 
   const addToCart = (product: Product) => {
     dispatch({ type: 'ADD_TO_CART', payload: product });

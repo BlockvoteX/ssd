@@ -26,6 +26,7 @@ interface AuthContextType {
   user: User | null;
   userProfile: User | null;
   loading: boolean;
+  jwt: string | null;
   signIn: (identifier: string, password: string) => Promise<{ success: boolean; message: string }>;
   signUp: (userData: SignUpData) => Promise<{ success: boolean; message: string }>;
   signOut: () => void;
@@ -121,6 +122,7 @@ const apiCall = async (endpoint: string, options: RequestInit = {}, retryCount =
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [jwt, setJwt] = useState<string | null>(localStorage.getItem('token'));
 
   // Initialize auth state on app load
   useEffect(() => {
@@ -129,6 +131,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const savedUser = localStorage.getItem('user');
 
       if (token && savedUser) {
+        setJwt(token);
         try {
           // First set user from localStorage for immediate access
           const parsedUser = JSON.parse(savedUser);
@@ -147,6 +150,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             localStorage.removeItem('token');
             localStorage.removeItem('user');
             setUser(null);
+            setJwt(null);
           }
         } catch (error) {
           console.error('Token verification failed:', error);
@@ -176,6 +180,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         localStorage.setItem('token', data.token);
         localStorage.setItem('user', JSON.stringify(userData));
         setUser(userData);
+        setJwt(data.token);
         
         return { success: true, message: data.message || 'Login successful' };
       } else {
@@ -212,6 +217,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         localStorage.setItem('token', data.token);
         localStorage.setItem('user', JSON.stringify(newUser));
         setUser(newUser);
+        setJwt(data.token);
         
         return { success: true, message: data.message || 'Registration successful' };
       } else {
@@ -242,6 +248,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     setUser(null);
+    setJwt(null);
   };
 
   const updateProfile = async (userData: Partial<User>) => {
@@ -285,6 +292,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     user,
     userProfile: user, // For backward compatibility
     loading,
+    jwt,
     signIn,
     signUp,
     signOut,
