@@ -169,16 +169,15 @@ router.post('/create-upi-order', upload.single('paymentScreenshot'), async (req,
 
 // POST /api/payments/create-cod-order
 // Create Cash on Delivery order
-router.post('/create-cod-order', async (req, res) => {
+router.post('/create-cod-order', authenticateToken, async (req, res) => {
   try {
     const { shippingAddress, notes = '' } = req.body;
 
-    // For demo purposes, redirect to guest order if no user authentication
+    // Only allow authenticated users to place COD orders
     if (!req.user || !req.user._id) {
-      return res.status(400).json({
+      return res.status(401).json({
         success: false,
-        message: 'Please use the guest order endpoint for COD orders without authentication',
-        redirect: '/api/orders/guest'
+        message: 'Authentication required to place orders.'
       });
     }
 
