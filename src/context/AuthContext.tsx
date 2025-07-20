@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import { apiCall } from '../utils/api';
 
 // Types
 interface User {
@@ -52,73 +53,6 @@ interface SignUpData {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// API base URL
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
-
-// Helper function to make API calls with retry logic
-const apiCall = async (endpoint: string, options: RequestInit = {}, retryCount = 3): Promise<{ response: Response; data: any }> => {
-  const token = localStorage.getItem('token');
-  
-  const defaultHeaders: HeadersInit = {
-    'Content-Type': 'application/json',
-  };
-
-  if (token) {
-    defaultHeaders.Authorization = `Bearer ${token}`;
-  }
-
-  for (let attempt = 0; attempt <= retryCount; attempt++) {
-    try {
-      const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-        ...options,
-        headers: {
-          ...defaultHeaders,
-          ...options.headers,
-        },
-      });
-
-      // If rate limited (429), wait and retry
-      if (response.status === 429 && attempt < retryCount) {
-        const waitTime = Math.pow(2, attempt) * 1000; // Exponential backoff: 1s, 2s, 4s
-        console.log(`Rate limited. Retrying in ${waitTime/1000}s... (attempt ${attempt + 1}/${retryCount + 1})`);
-        await new Promise(resolve => setTimeout(resolve, waitTime));
-        continue;
-      }
-
-      // Check if response is ok
-      if (!response.ok) {
-        if (response.status === 429) {
-          throw new Error('Server is busy. Please try again in a few minutes.');
-        }
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      return { response, data };
-    } catch (error) {
-      // If it's the last attempt or not a retryable error, throw
-      if (attempt === retryCount || !(error instanceof TypeError)) {
-        console.error('API call failed:', error);
-        
-        // Check if it's a network error (backend not available)
-        if (error instanceof TypeError && error.message === 'Failed to fetch') {
-          throw new Error('Backend server is not available. Please deploy the backend first or use demo mode.');
-        }
-        
-        throw error;
-      }
-      
-      // Wait before retrying on network errors
-      const waitTime = Math.pow(2, attempt) * 1000;
-      console.log(`Network error. Retrying in ${waitTime/1000}s... (attempt ${attempt + 1}/${retryCount + 1})`);
-      await new Promise(resolve => setTimeout(resolve, waitTime));
-    }
-  }
-  
-  // This should never be reached, but TypeScript needs it
-  throw new Error('Maximum retry attempts exceeded');
-};
-
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
@@ -138,11 +72,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setUser(parsedUser);
           
           // Then verify token with server in background
-          const { response, data } = await apiCall('/auth/verify-token', {
+          const data = await apiCall('/auth/verify-token', {
             method: 'POST',
+            requireAuth: true
           });
 
-          if (response.ok && data.success) {
+          if (data.success) {
             // Update with fresh data from server
             setUser(data.user);
           } else {
@@ -169,12 +104,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signIn = async (identifier: string, password: string) => {
     setLoading(true);
     try {
-      const { response, data } = await apiCall('/auth/login', {
+      const data = await apiCall('/auth/login', {
         method: 'POST',
-        body: JSON.stringify({ identifier, password }),
+        body: { identifier, password },
+        requireAuth: false
       });
 
-      if (response.ok && data.success) {
+      if (data.success) {
         // Optimized: Store user data immediately
         const userData = data.user;
         localStorage.setItem('token', data.token);
@@ -206,12 +142,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signUp = async (userData: SignUpData) => {
     setLoading(true);
     try {
-      const { response, data } = await apiCall('/auth/register', {
+      const data = await apiCall('/auth/register', {
         method: 'POST',
-        body: JSON.stringify(userData),
+        body: userData,
+        requireAuth: false
       });
 
-      if (response.ok && data.success) {
+      if (data.success) {
         // Optimized: Store user data and login immediately after registration
         const newUser = data.user;
         localStorage.setItem('token', data.token);
@@ -253,12 +190,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const updateProfile = async (userData: Partial<User>) => {
     try {
-      const { response, data } = await apiCall('/auth/profile', {
+      const data = await apiCall('/auth/profile', {
         method: 'PUT',
-        body: JSON.stringify(userData),
+        body: userData,
+        requireAuth: true
       });
 
-      if (response.ok && data.success) {
+      if (data.success) {
         localStorage.setItem('user', JSON.stringify(data.user));
         setUser(data.user);
         return { success: true, message: data.message };
@@ -273,14 +211,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const forgotPassword = async (identifier: string) => {
     try {
-      const { response, data } = await apiCall('/auth/forgot-password', {
+      const data = await apiCall('/auth/forgot-password', {
         method: 'POST',
-        body: JSON.stringify({ identifier }),
+        body: { identifier },
+        requireAuth: false
       });
 
       return { 
-        success: response.ok && data.success, 
-        message: data.message || (response.ok ? 'Request submitted' : 'Request failed') 
+        success: data.success, 
+        message: data.message || (data.success ? 'Request submitted' : 'Request failed') 
       };
     } catch (error) {
       console.error('Forgot password error:', error);
