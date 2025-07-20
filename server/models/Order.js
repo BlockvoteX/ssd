@@ -52,11 +52,7 @@ const orderSchema = new mongoose.Schema({
   user: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    required: false // Allow null for guest orders
-  },
-  isGuestOrder: {
-    type: Boolean,
-    default: false
+    required: true // Only allow authenticated user orders
   },
   customer: {
     name: {
